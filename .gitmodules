@@ -1,0 +1,7 @@
+[submodule "third_party/BRIGHT"]
+	path = third_party/BRIGHT
+	url = https://github.com/xlang-ai/BRIGHT.git
+	branch = main
+[submodule "third_party/ReasonIR"]
+	path = third_party/ReasonIR
+	url = https://github.com/facebookresearch/ReasonIR.git
