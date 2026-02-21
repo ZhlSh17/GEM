@@ -1,0 +1,16 @@
+debug: false
+compute_environment: LOCAL_MACHINE
+distributed_type: FSDP
+mixed_precision: bf16
+num_machines: 1
+fsdp_config:
+  fsdp_transformer_layer_cls_to_wrap: Qwen2DecoderLayer
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_sharding_strategy: FULL_SHARD
+  fsdp_backward_prefetch: NO_PREFETCH
+  fsdp_forward_prefetch: false
+  fsdp_use_orig_params: true
+  fsdp_offload_params: true
+  fsdp_state_dict_type: FULL_STATE_DICT
+  fsdp_cpu_ram_efficient_loading: true
+  fsdp_sync_module_states: true

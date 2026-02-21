@@ -1,12 +1,34 @@
 import os
 import json
 from dataclasses import dataclass
+from collections.abc import Callable
 
 from tqdm import tqdm
-from datasets import load_dataset
+from loguru import logger
 
-from red.utils import INDEX_DIR, DATA_DIR, ROOT_DIR
-from red.datasets.bright import TASKS
+from gem.utils import INDEX_DIR, DATA_DIR, ROOT_DIR
+from gem.datasets.bright import TASKS
+from gem.datasets.bright import load_dataset
+
+
+def log_results(
+    results_dir: str | os.PathLike,
+    model: str,
+    long: bool = False,
+) -> str:
+    task2score = {}
+    for task in TASKS:
+        path = os.path.join(results_dir, f"{task}_{model}_long_{long}", "results.json")
+        if not os.path.exists(path):
+            continue
+
+        with open(path, "rt") as f:
+            results = json.load(f)
+            task2score[task] = results["NDCG@10"] * 100
+
+    if task2score:
+        task2score["avg"] = sum(task2score.values()) / len(task2score)
+        logger.info(f"\n{json.dumps(task2score, indent=2)}")
 
 
 _RETRIEVERS = [
@@ -29,7 +51,8 @@ _RETRIEVERS = [
     "m2",
     "contriever",
     "reasonir",
-    "repllama",
+    "promptriever",
+    "gem",
 ]
 
 
@@ -50,12 +73,20 @@ class Args:
     reasoning: str | None = None
     debug: bool = False
     ignore_cache: bool = False
-    concat_reasoning: bool = False
+    # additional args for GEM:
+    overwrite: bool = False
+    generation_batch_size: int = -1
+    no_generation: bool = False
+    gem_reason_file: str | None = None  # pre-computed responses
 
 
-# TODO: refactor
-# TODO: option to overwrite query_emb
-# TODO: option to overwrite results
+def _update_retrieval_funcs(funcs: dict[str, Callable]) -> None:
+    from gem.datasets.bright.retrievers import retrieval_gem, retrieval_promptriever
+
+    funcs["gem"] = retrieval_gem
+    funcs["promptriever"] = retrieval_promptriever
+
+
 def run_bright(args: Args) -> None:
     """Main.
 
@@ -65,10 +96,9 @@ def run_bright(args: Args) -> None:
     """
     from third_party.ReasonIR.evaluation.bright.retrievers import RETRIEVAL_FUNCS, calculate_retrieval_metrics
 
-    if args.model == "repllama":
-        from red.datasets.bright.retrievers import retrieval_repllama
-
-        RETRIEVAL_FUNCS["repllama"] = retrieval_repllama
+    _update_retrieval_funcs(RETRIEVAL_FUNCS)
+    reasons: list[str] | None = None
+    gem_instruction = None
 
     args.output_dir = os.path.join(args.output_dir, f"{args.task}_{args.model}_long_{args.long_context}")
     if not os.path.isdir(args.output_dir):
@@ -80,27 +110,30 @@ def run_bright(args: Args) -> None:
         with open(args.input_file) as f:
             examples = json.load(f)
     elif args.reasoning is not None:
-        reasoning_examples = load_dataset("xlangai/bright", f"{args.reasoning}_reason", cache_dir=args.cache_dir)[
-            args.task
-        ]
-        if args.concat_reasoning:
-            examples = load_dataset("xlangai/bright", "examples", cache_dir=args.cache_dir)[args.task]
-
-            def concat(example):
-                example["query"] = example["query"] + "\n<REASON>\n" + example["reason"]
-                return example
-
-            examples = examples.add_column("reason", reasoning_examples["query"]).map(concat).remove_columns("reason")
+        examples = load_dataset("examples")[args.task]
+        if args.reasoning != "gem":
+            reasoning_examples = load_dataset(f"{args.reasoning}_reason")[args.task]
+            if args.model == "gem":
+                reasons = list(reasoning_examples["query"])
+            else:
+                examples = reasoning_examples
         else:
-            examples = reasoning_examples
+            if args.gem_reason_file is None:
+                raise ValueError("require gem_reason_file")
+
+            with open(args.gem_reason_file, "rt") as f:
+                _data: dict = json.load(f)
+
+            reasons = _data[args.task]
+            gem_instruction = _data.get("instruction")
     else:
-        examples = load_dataset("xlangai/bright", "examples", cache_dir=args.cache_dir)[args.task]
+        examples = load_dataset("examples")[args.task]
 
     print("loading documents...")
     if args.long_context:
-        doc_pairs = load_dataset("xlangai/bright", "long_documents", cache_dir=args.cache_dir)[args.task]
+        doc_pairs = load_dataset("long_documents")[args.task]
     else:
-        doc_pairs = load_dataset("xlangai/bright", "documents", cache_dir=args.cache_dir)[args.task]
+        doc_pairs = load_dataset("documents")[args.task]
 
     doc_ids = []
     documents = []
@@ -108,7 +141,7 @@ def run_bright(args: Args) -> None:
         doc_ids.append(dp["id"])
         documents.append(dp["content"])
 
-    if not os.path.isfile(score_file_path):
+    if not os.path.isfile(score_file_path) or args.overwrite:
         config = None
         default_config_path = os.path.join(args.config_dir, args.model, f"{args.task}.json")
         if os.path.exists(default_config_path):
@@ -156,6 +189,25 @@ def run_bright(args: Args) -> None:
         if args.ignore_cache:
             kwargs.update({"ignore_cache": args.ignore_cache})
 
+        # additional kwargs
+        if args.generation_batch_size > 0:
+            kwargs["generation_batch_size"] = args.generation_batch_size
+
+        kwargs["overwrite"] = args.overwrite
+        kwargs["no_generation"] = args.no_generation
+
+        if reasons is not None:
+            print(f"using {args.reasoning} reasonings")
+            assert len(reasons) == len(queries)
+
+            if args.model == "gem":
+                kwargs["reasons"] = reasons
+            else:
+                queries = reasons
+
+            kwargs["gem_instruction"] = gem_instruction
+
+        # compatible with BRIGHT code
         instructions = None
         if config is not None:
             instructions = config["instructions_long"] if args.long_context else config["instructions"]
@@ -235,7 +287,10 @@ def parse_args():
     parser.add_argument("--reasoning", type=str, default=None)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--ignore_cache", action="store_true")
-    parser.add_argument("--concat_reasoning", action="store_true")
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--generation_batch_size", type=int, default=-1)
+    parser.add_argument("--no_generation", action="store_true")
+    parser.add_argument("--gem_reason_file", type=str, default=None)
     return parser.parse_args()
 
 
