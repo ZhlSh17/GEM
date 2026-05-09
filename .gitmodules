@@ -8,3 +8,6 @@
 [submodule "third_party/InstructIR"]
 	path = third_party/InstructIR
 	url = https://github.com/kaistAI/InstructIR.git
+[submodule "third_party/lm_eval"]
+	path = third_party/lm_eval
+	url = https://github.com/EleutherAI/lm-evaluation-harness.git
