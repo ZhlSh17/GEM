@@ -31,21 +31,6 @@ class ModelArguments:
 
     attn_implementation: str | None = field(default=None)
 
-    # for lora
-    lora: bool = field(default=False, metadata={"help": "whether to use lora"})
-
-    lora_name_or_path: str | None = field(default=None, metadata={"help": "path to pretrained lora model"})
-
-    lora_r: int = field(default=32, metadata={"help": "lora r"})
-
-    lora_alpha: int = field(default=64, metadata={"help": "lora alpha"})
-
-    lora_dropout: float = field(default=0.1, metadata={"help": "lora dropout"})
-
-    lora_target_modules: str = field(
-        default="q_proj,k_proj,v_proj,o_proj,down_proj,up_proj,gate_proj", metadata={"help": "lora target modules"}
-    )
-
 
 @dataclass
 class DataArguments:

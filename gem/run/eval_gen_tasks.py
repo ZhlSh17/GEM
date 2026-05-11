@@ -20,6 +20,7 @@ def parse_args():
     parser.add_argument("--output_dir", type=Path, default=DATA_DIR / "results/gen_tasks")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--tasks", type=str, nargs="+", default=None)
+    parser.add_argument("--gem", action="store_true")
 
     return parser.parse_args()
 
@@ -28,13 +29,13 @@ def main():
     args = parse_args()
     batch_size = args.batch_size
 
-    tasks = ["ifeval", "mmlu", "arc_challenge", "gsm8k", "humaneval_instruct"] if args.tasks is None else args.tasks
+    tasks = ["ifeval", "mmlu", "arc_challenge", "gsm8k_cot", "humaneval_instruct"] if args.tasks is None else args.tasks
     os.environ["HF_ALLOW_CODE_EVAL"] = "1"  # for coding tasks
 
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if "gem" in args.model:
+    if args.gem:
         model = GEM.from_pretrained(args.model, dtype=torch.bfloat16, device_map="auto").eval()
         model.forward = model._model.forward
         tokenizer = model.tokenizer

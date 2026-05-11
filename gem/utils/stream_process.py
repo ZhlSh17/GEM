@@ -12,8 +12,6 @@ if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
 
 
-# TODO: rename `StreamProcessor`
-# TODO: make this a function instead of a class?
 class StreamProcessor:
     """Stream data processing with resumability support.
 

@@ -11,7 +11,7 @@ from third_party.InstructIR.eval.robust_eval import CustomEvaluateRetrieval
 from datasets import load_dataset as load_dataset_hf
 
 from gem.utils import HF_DATASETS_DIR
-from gem.run.beir import load_beir_model, parse_known_args
+from gem.exp.base import load_model, parse_known_args
 
 
 def _preproc_query(text: str, inverse: bool = False) -> str:
@@ -88,7 +88,7 @@ def main():
     corpus, queries, qrels = load_instructir()
     logger.info(f"loaded corpus={len(corpus)} queries={len(queries)} qrels={len(qrels)}")
 
-    retriever = CustomEvaluateRetrieval(DRES(load_beir_model(args), batch_size=args.batch_size))
+    retriever = CustomEvaluateRetrieval(DRES(load_model(args), batch_size=args.batch_size))
     results = retriever.retrieve(corpus, queries)
 
     queries = {qid: _preproc_query(text, inverse=True) for qid, text in queries.items()}

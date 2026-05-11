@@ -15,7 +15,7 @@ from gem.model import GEM
 from gem.exp import BiEncoder
 from gem.exp.repllama import Repllama
 from gem.exp.promptriever import Promptriever
-from gem.run.beir import parse_known_args
+from gem.exp.base import parse_known_args
 
 TASK_NAMES = [
     "Core17InstructionRetrieval",
@@ -35,7 +35,7 @@ def preprocess_queries(queries: list[str], instructions: dict[str, str]) -> list
     return queries
 
 
-# TODO: refactor; code reuse; be consistent with implementation for BEIR
+# TODO: refacotring; code reuse
 class BiEncoder_MTEB(DRESModel):
 
     def __init__(
@@ -190,9 +190,9 @@ def encode_query_expansion(
     def wrapper_add_gem_reason(queries: list[str], *args, **kwargs) -> torch.Tensor:
         for q in queries:
             assert q in query2expansion
-        
+
         reasons = [query2expansion[q] for q in queries]
-        
+
         return encode_query(queries, *args, reason=reasons, **kwargs)
 
     if "query2doc" in qe_file:

@@ -32,7 +32,6 @@ class GEMOutput(ModelOutput):
     emb_loss: torch.Tensor | None = None
 
 
-# TODO: base class for inference, this for train
 class GEM(PreTrainedModel, GenerationMixin):
     config_class = AutoConfig
     base_model_prefix = "_model"

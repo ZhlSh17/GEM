@@ -65,7 +65,6 @@ def main() -> None:
     )
     data_collator = GEMDataCollator(tokenizer=tokenizer)
 
-    # TODO: support validation? implement evaluation metrics?
     trainer = GEMTrainer(
         model=model,
         args=train_args,

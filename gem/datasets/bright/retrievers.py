@@ -107,7 +107,7 @@ def retrieval_gem(
 ) -> dict:
     from third_party.ReasonIR.evaluation.bright.retrievers import get_scores
     from gem.model import GEM
-    from gem.run.beir import GEM_BEIR
+    from gem.exp.base import GEM_Encoder
 
     checkpoint = kwargs.get("checkpoint", None)
     if checkpoint is None:
@@ -125,7 +125,7 @@ def retrieval_gem(
     print(f"{query_max_length=}")
     print(f"{doc_max_length=}")
 
-    wrapper = GEM_BEIR(
+    wrapper = GEM_Encoder(
         model,
         no_generation=kwargs.get("no_generation", False),
         generation_batch_size=kwargs.get("generation_batch_size") or batch_size,
