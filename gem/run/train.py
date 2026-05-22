@@ -36,7 +36,6 @@ def main() -> None:
 
     set_seed(train_args.seed)
 
-    # TODO: support lora?
     # Model
     model = GEM.from_pretrained(
         model_args.model_name_or_path,

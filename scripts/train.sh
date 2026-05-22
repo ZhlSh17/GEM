@@ -1,4 +1,3 @@
-export WANDB_API_KEY=...
 export NCCL_P2P_DISABLE=1
 
 MODEL_NAME="Qwen/Qwen3-4B-Instruct-2507"
