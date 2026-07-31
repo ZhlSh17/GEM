@@ -119,7 +119,7 @@ def _load_test_samples():
         subsets.append(subset)
 
     dataset: Dataset = concatenate_datasets(subsets)
-    dataset = dataset.shuffle(seed=42).take(256)
+    dataset = dataset.shuffle(seed=42).take(128)
     return dataset
 
 
@@ -129,7 +129,8 @@ def _benchmark_time(checkpoint: str):
 
     dataset = _load_test_samples()
 
-    latency = []
+    latency_gen = []
+    latency_emb = []
 
     for idx in tqdm(range(len(dataset))):
         start = perf_counter()
@@ -141,42 +142,57 @@ def _benchmark_time(checkpoint: str):
             max_new_tokens=8192,
         )[0]
 
+        latency_gen.append(perf_counter() - start)
+
+        start = perf_counter()
         embs = encoder.encode_passage(resp, batch_size=1)
-        latency.append(perf_counter() - start)
+        latency_emb.append(perf_counter() - start)
 
     with open(DATA_DIR / "qe/pipeline_latency/baseline.json", "wt") as f:
-        json.dump(latency, f)
+        json.dump({"latency_gen": latency_gen, "latency_emb": latency_emb}, f)
 
 
-def _benchmark_time_gem(checkpoint: str):
-    model = GEM.from_pretrained(checkpoint, device_map="auto", dtype=torch.bfloat16).eval()
+def _benchmark_time_gem(checkpoint: str, length: int | None = None, embed_only: bool = False):
+    from .gem_timer import GEM_Timer
+    from gem.run.offline_gen_bright import _INSTRUCTION_WITH_LENGTH
+
+    model = GEM_Timer.from_pretrained(checkpoint, device_map="auto", dtype=torch.bfloat16).eval()
     dataset = _load_test_samples()
 
-    latency = []
+    latency_full = []
     for idx in tqdm(range(len(dataset))):
         start = perf_counter()
         item = dataset[idx]
-        embs = model.encode_query(
-            item["query"],
-            batch_size=1,
-            do_sample=False,
-            max_new_tokens=8192,
-        )
-        latency.append(perf_counter() - start)
+        if not embed_only:
+            embs = model.encode_query(
+                item["query"],
+                batch_size=1,
+                do_sample=False,
+                max_new_tokens=8192,
+                instruction=_INSTRUCTION_WITH_LENGTH.format(length=length) if length else None,
+            )
+        else:
+            embs = model.encode_passage(item["query"], batch_size=1)
 
-    with open(DATA_DIR / "qe/pipeline_latency/gem.json", "wt") as f:
-        json.dump(latency, f)
+        latency_full.append(perf_counter() - start)
+
+    with open(DATA_DIR / f"qe/pipeline_latency/gem_{length=}_{embed_only=}.json", "wt") as f:
+        json.dump({"latency_full": latency_full, "latency_emb": model.latency}, f)
 
 
 def main():
-    results = _offline_gen_bright()
+    # results = _offline_gen_bright()
 
-    with open(DATA_DIR / "qe/bright_qwen3.json", "wt") as f:
-        json.dump(results, f)
+    # with open(DATA_DIR / "qe/bright_qwen3.json", "wt") as f:
+    # json.dump(results, f)
 
-    # _benchmark_time_gem("train_runs/gem_qwen3/checkpoint-500")
-    # torch.cuda.empty_cache()
-    # _benchmark_time("train_runs/gem_qwen3_msmarco_embed_only/checkpoint-500")
+    for length in [None, 64, 256, 512, 1024]:
+        _benchmark_time_gem("train_runs/gem_qwen3/checkpoint-500", length)
+
+    _benchmark_time_gem("train_runs/gem_qwen3_msmarco_embed_only/checkpoint-500", embed_only=True)
+
+    torch.cuda.empty_cache()
+    _benchmark_time("train_runs/gem_qwen3_msmarco_embed_only/checkpoint-500")
 
 
 if __name__ == "__main__":
