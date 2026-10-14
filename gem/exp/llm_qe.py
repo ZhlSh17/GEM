@@ -153,11 +153,11 @@ class GEMReasoner:
         if "temperature" not in kwargs:
             kwargs["temperature"] = self._temperature
 
-        _, resps = self.model.encode_query(
+        _, resps = self.model.encode_queries(
             queries,
             batch_size=batch_size,
             return_generation=True,
-            verbose=use_tqdm,
+            show_progress_bar=use_tqdm,
             **kwargs,
         )
 

@@ -7,20 +7,20 @@ from transformers import TrainingArguments as HfTrainingArguments
 class TrainingArguments(HfTrainingArguments):
     negatives_cross_device: bool = field(
         default=False,
-        metadata={"help": "Share the negatives across all GPUs. This argument will extend the number of negatives."},
+        metadata={"help": "Whether to share the negatives across all GPUs. This argument will extend the number of negatives."},
     )
 
     emb_loss_temperature: float = field(
-        default=1.0, metadata={"help": "Temperature for softmax when computing contrastive loss."}
+        default=0.02, metadata={"help": "Temperature for softmax when computing contrastive loss."}
     )
 
     gen_loss_weight: float = field(
-        default=1.0, metadata={"help": "Coefficient applied to causal language modeling loss."}
+        default=0.1, metadata={"help": "Causal language modeling loss weight."}
     )
 
-    emb_loss_weight: float = field(default=1.0, metadata={"help": "Coefficient applied to contrasitive loss."})
+    emb_loss_weight: float = field(default=1.0, metadata={"help": "Contrasitive loss weight."})
 
-    embed_only: bool = field(default=False, metadata={"help": "no generation; use only query and document"})
+    embed_only: bool = field(default=False, metadata={"help": "No generation; use only query and document"})
 
 
 @dataclass
@@ -34,9 +34,9 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    train_data: str = field(metadata={"help": "Train dataset path. Will be loaded with `datasets.load_from_disk`"})
-    max_query_len: int = field(default=4096, metadata={"help": "Max token length for query sequences."})
-    max_passage_len: int = field(default=4096, metadata={"help": "Max token length for passage sequences."})
+    train_data: str = field(metadata={"help": "Train dataset path. Will be loaded with `datasets.load_from_disk` if a dir is provided, otherwise expect a jsonl file."})
+    max_query_len: int = field(default=4096, metadata={"help": "Query-side truncation length."})
+    max_passage_len: int = field(default=4096, metadata={"help": "Doc-side truncation length."})
     train_group_size: int = field(
         default=2, metadata={"help": "1 positive + (train_group_size - 1) negatives per query."}
     )

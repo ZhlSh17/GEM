@@ -74,14 +74,17 @@ class Preprocessor:
         instruction: str | None = QUERY_INSTRUCTION,
         reason: str | None = None,
         append_embed_token: bool = True,
+        prompt: str | None = None,
     ) -> str:
-        if instruction is None:
-            instruction = QUERY_INSTRUCTION
+        if prompt is None:
+            if instruction is None:
+                instruction = QUERY_INSTRUCTION
+            prompt = _QUERY_PROMPT.format(instruction=instruction, text="{text}")
 
         conversation = [
             {
                 "role": "user",
-                "content": _QUERY_PROMPT.format(text=query, instruction=instruction),
+                "content": prompt.format(text=query),
             },
         ]
 

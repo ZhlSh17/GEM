@@ -24,12 +24,12 @@ class ReasonIR:
         # See: https://github.com/facebookresearch/ReasonIR/blob/main/training/train.sh#L77
         self._max_length = max_length
 
-    def encode_query(
+    def encode_queries(
         self,
         texts: list[str],
         *,
         batch_size: int = 16,
-        verbose: bool = True,
+        show_progress_bar: bool = True,
         max_length: int | None = None,
         instruction: str = "",
         **kwargs: Any,
@@ -43,12 +43,12 @@ class ReasonIR:
             convert_to_tensor=True,
         )
 
-    def encode_passage(
+    def encode_corpus(
         self,
         texts: list[str],
         *,
         batch_size: int = 16,
-        verbose: bool = True,
+        show_progress_bar: bool = True,
         max_length: int | None = None,
         instruction: str = "",
         **kwargs: Any,

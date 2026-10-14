@@ -9,7 +9,7 @@ from datasets import concatenate_datasets, Dataset
 from gem.run.bright import TASKS as BRIGHT_TASKS
 from gem.datasets.bright import load_dataset as load_bright_dataset
 from gem.model import GEM
-from gem.exp.gem_timer import GEM_Timer
+from gem.exp.gem_timer import GEMTimer
 
 # for experiments with varying generation length
 _INSTRUCTION_WITH_LENGTH = """\
@@ -35,11 +35,11 @@ def _offline_gem_bright(
     for task in BRIGHT_TASKS:
         subset = dataset[task]
         queries: list[str] = list(subset["query"])
-        _, reasons = gem.encode_query(
+        _, reasons = gem.encode_queries(
             queries,
             instruction=instruction,
             batch_size=batch_size,
-            verbose=True,
+            show_progress_bar=True,
             max_length=1024,
             max_new_tokens=max_tokens,
             do_sample=False,
@@ -53,7 +53,7 @@ def _offline_gem_bright(
 
 
 def _benchmark_time_with_resps(
-    checkpoint: str | GEM_Timer,
+    checkpoint: str | GEMTimer,
     instruction: str | None,
     gem_output_file: str | None,
     batch_size: int = 1,
@@ -92,16 +92,16 @@ def _benchmark_time_with_resps(
 
     gem = (
         checkpoint
-        if isinstance(checkpoint, GEM_Timer)
-        else GEM_Timer.from_pretrained(checkpoint, device_map="auto", dtype=torch.bfloat16).eval()
+        if isinstance(checkpoint, GEMTimer)
+        else GEMTimer.from_pretrained(checkpoint, device_map="auto", dtype=torch.bfloat16).eval()
     )
 
-    gem.encode_query(
+    gem.encode_queries(
         queries,
-        reason=reasons,
+        reasons=reasons,
         instruction=instruction,
         batch_size=batch_size,
-        verbose=True,
+        show_progress_bar=True,
         max_length=1024,
         max_new_tokens=max_tokens,
         do_sample=False,

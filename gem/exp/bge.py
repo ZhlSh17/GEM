@@ -15,35 +15,35 @@ class BGE:
             **kwargs,
         )
 
-    def encode_query(
+    def encode_queries(
         self,
         texts: list[str],
         *,
         batch_size: int,
-        verbose: bool = True,
+        show_progress_bar: bool = True,
         instruction: str = "Represent this sentence for searching relevant passages: ",
         **kwargs: Any,
     ) -> torch.Tensor:
         return self._model.encode(
             [instruction + query for query in texts],
             batch_size=batch_size,
-            show_progress_bar=verbose,
+            show_progress_bar=show_progress_bar,
             normalize_embeddings=True,
             convert_to_tensor=True,
         )
 
-    def encode_passage(
+    def encode_corpus(
         self,
         texts: list[str],
         *,
         batch_size: int,
-        verbose: bool = True,
+        show_progress_bar: bool = True,
         **kwargs: Any,
     ) -> torch.Tensor:
         return self._model.encode(
             texts,
             batch_size=batch_size,
-            show_progress_bar=verbose,
+            show_progress_bar=show_progress_bar,
             normalize_embeddings=True,
             convert_to_tensor=True,
         )

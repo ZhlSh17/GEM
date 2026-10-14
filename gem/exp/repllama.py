@@ -34,40 +34,38 @@ class Repllama:
         self.tokenizer: PreTrainedTokenizerBase = tokenizer
 
     @torch.no_grad()
-    def encode_query(
+    def encode_queries(
         self,
         texts: list[str],
         *,
         prompt: str = "query: {}</s>",
         batch_size: int = 16,
-        verbose: bool = True,
+        show_progress_bar: bool = True,
         max_length: int | None = None,
-        tokenizer: PreTrainedTokenizerBase | None = None,
         **kwargs: Any,
     ) -> torch.Tensor:
         if isinstance(max_length, int):
             texts = self._truncate(texts, max_length=max_length)
 
         texts = [prompt.format(x) for x in texts]
-        return self.encode(texts, batch_size=batch_size, verbose=verbose, tokenizer=tokenizer)
+        return self.encode(texts, batch_size=batch_size, show_progress_bar=show_progress_bar)
 
     @torch.no_grad()
-    def encode_passage(
+    def encode_corpus(
         self,
         texts: list[str],
         *,
         prompt: str = "passage: {}</s>",
         batch_size: int = 16,
-        verbose: bool = True,
+        show_progress_bar: bool = True,
         max_length: int | None = None,
-        tokenizer: PreTrainedTokenizerBase | None = None,
         **kwargs: Any,
     ) -> torch.Tensor:
         if isinstance(max_length, int):
             texts = self._truncate(texts, max_length=max_length)
 
         texts = [prompt.format(x) for x in texts]
-        return self.encode(texts, batch_size=batch_size, verbose=verbose, tokenizer=tokenizer)
+        return self.encode(texts, batch_size=batch_size, show_progress_bar=show_progress_bar)
 
     @torch.no_grad()
     def encode(
@@ -75,21 +73,18 @@ class Repllama:
         texts: list[str],
         *,
         batch_size: int = 16,
-        verbose: bool = True,
-        tokenizer: PreTrainedTokenizerBase | None = None,
+        show_progress_bar: bool = True,
     ) -> torch.Tensor:
         if isinstance(texts, str):
             texts = [texts]
-
-        tokenizer = tokenizer or self.tokenizer
 
         all_embs = []
         for start_idx in tqdm(
             range(0, len(texts), batch_size),
             desc="encode",
-            disable=not verbose,
+            disable=not show_progress_bar,
         ):
-            inputs = tokenizer(
+            inputs = self.tokenizer(
                 texts[start_idx : start_idx + batch_size],
                 padding=True,
                 padding_side="left",
@@ -107,22 +102,15 @@ class Repllama:
         embs = nn.functional.normalize(embs, p=2, dim=-1)
         return embs
 
-    def _truncate(
-        self,
-        texts: list[str],
-        max_length: int,
-        tokenizer: PreTrainedTokenizerBase | None = None,
-    ) -> list[str]:
-        tokenizer = tokenizer or self.tokenizer
-
+    def _truncate(self, texts: list[str], max_length: int) -> list[str]:
         if isinstance(texts, str):
             texts = [texts]
 
-        inputs = tokenizer(
+        inputs = self.tokenizer(
             texts,
             add_special_tokens=False,
             truncation=True,
             max_length=max_length,
         )
 
-        return tokenizer.batch_decode(inputs["input_ids"])
+        return self.tokenizer.batch_decode(inputs["input_ids"])

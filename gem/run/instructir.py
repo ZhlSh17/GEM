@@ -11,7 +11,7 @@ from third_party.InstructIR.eval.robust_eval import CustomEvaluateRetrieval
 from datasets import load_dataset as load_dataset_hf
 
 from gem.utils import HF_DATASETS_DIR
-from gem.exp.base import load_model, parse_known_args
+from gem.exp.helpers import load_model, parse_known_args
 
 
 def _preproc_query(text: str, inverse: bool = False) -> str:

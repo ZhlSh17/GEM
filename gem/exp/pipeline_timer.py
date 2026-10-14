@@ -22,7 +22,7 @@ BRIGHT_PROMPT = (
 )
 
 
-class CLM_Helper:
+class CLMHelper:
 
     def __init__(self, model_name: str) -> None:
         self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
@@ -90,7 +90,7 @@ def _offline_gen_bright(
     batch_size: int = 16,
     max_tokens: int = 8192,
 ) -> dict:
-    model = CLM_Helper(model_name)
+    model = CLMHelper(model_name)
 
     dataset = load_bright_dataset("examples")
 
@@ -124,7 +124,7 @@ def _load_test_samples():
 
 
 def _benchmark_time(checkpoint: str):
-    reasoner = CLM_Helper("Qwen/Qwen3-4B-Instruct-2507")
+    reasoner = CLMHelper("Qwen/Qwen3-4B-Instruct-2507")
     encoder = GEM.from_pretrained(checkpoint, device_map="auto", dtype=torch.bfloat16).eval()
 
     dataset = _load_test_samples()
@@ -145,7 +145,7 @@ def _benchmark_time(checkpoint: str):
         latency_gen.append(perf_counter() - start)
 
         start = perf_counter()
-        embs = encoder.encode_passage(resp, batch_size=1)
+        embs = encoder.encode_corpus(resp, batch_size=1)
         latency_emb.append(perf_counter() - start)
 
     with open(DATA_DIR / "qe/pipeline_latency/baseline.json", "wt") as f:
@@ -153,10 +153,10 @@ def _benchmark_time(checkpoint: str):
 
 
 def _benchmark_time_gem(checkpoint: str, length: int | None = None, embed_only: bool = False):
-    from .gem_timer import GEM_Timer
+    from .gem_timer import GEMTimer
     from gem.run.offline_gen_bright import _INSTRUCTION_WITH_LENGTH
 
-    model = GEM_Timer.from_pretrained(checkpoint, device_map="auto", dtype=torch.bfloat16).eval()
+    model = GEMTimer.from_pretrained(checkpoint, device_map="auto", dtype=torch.bfloat16).eval()
     dataset = _load_test_samples()
 
     latency_full = []
@@ -164,7 +164,7 @@ def _benchmark_time_gem(checkpoint: str, length: int | None = None, embed_only: 
         start = perf_counter()
         item = dataset[idx]
         if not embed_only:
-            embs = model.encode_query(
+            embs = model.encode_queries(
                 item["query"],
                 batch_size=1,
                 do_sample=False,
@@ -172,7 +172,7 @@ def _benchmark_time_gem(checkpoint: str, length: int | None = None, embed_only: 
                 instruction=_INSTRUCTION_WITH_LENGTH.format(length=length) if length else None,
             )
         else:
-            embs = model.encode_passage(item["query"], batch_size=1)
+            embs = model.encode_corpus(item["query"], batch_size=1)
 
         latency_full.append(perf_counter() - start)
 
@@ -184,15 +184,12 @@ def main():
     # results = _offline_gen_bright()
 
     # with open(DATA_DIR / "qe/bright_qwen3.json", "wt") as f:
-    # json.dump(results, f)
+    #     json.dump(results, f)
 
     for length in [None, 64, 256, 512, 1024]:
         _benchmark_time_gem("train_runs/gem_qwen3/checkpoint-500", length)
 
     _benchmark_time_gem("train_runs/gem_qwen3_msmarco_embed_only/checkpoint-500", embed_only=True)
-
-    torch.cuda.empty_cache()
-    _benchmark_time("train_runs/gem_qwen3_msmarco_embed_only/checkpoint-500")
 
 
 if __name__ == "__main__":

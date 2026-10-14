@@ -2,7 +2,7 @@ import os
 import json
 import functools
 import argparse
-from typing import Any
+from typing import Any, cast
 from collections.abc import Callable
 
 import numpy as np
@@ -15,7 +15,7 @@ from gem.model import GEM
 from gem.exp import BiEncoder
 from gem.exp.repllama import Repllama
 from gem.exp.promptriever import Promptriever
-from gem.exp.base import parse_known_args
+from gem.exp.helpers import parse_known_args, BaseEncoder, GEMEncoder
 
 TASK_NAMES = [
     "Core17InstructionRetrieval",
@@ -24,55 +24,57 @@ TASK_NAMES = [
 ]
 
 
-def concat_query_instruct(query: str, instruction: str) -> str:
-    return f"{query} {instruction}".strip()
-
-
 def preprocess_queries(queries: list[str], instructions: dict[str, str]) -> list[str]:
     if instructions:
-        queries = [concat_query_instruct(query, instructions[query]) for query in queries]
+        queries = [f"{query} {instructions[query]}".strip() for query in queries]
 
     return queries
 
 
-# TODO: refacotring; code reuse
-class BiEncoder_MTEB(DRESModel):
+# Adapted from: https://github.com/orionw/FollowIR/blob/master/models/e5/evaluate_e5.py
+class MTEBEncoder(DRESModel):
+    """Wrapper for MTEB.
+
+    See Also:
+        :class:`mteb.evaluation.evaluators.RetrievalEvaluator.DRESModel`
+
+    """
 
     def __init__(
         self,
         model: BiEncoder,
         verbose: bool = True,
         save_corpus_embeddings: bool = True,
+        sep: str = "\n",
         **kwargs: Any,
     ) -> None:
         super().__init__(model, save_corpus_embeddings=save_corpus_embeddings, **kwargs)
 
         self.verbose = verbose
-
-    def encode_query(self, texts: list[str], batch_size: int, **kwargs: Any) -> torch.Tensor:
-        model: BiEncoder = self.model
-        return model.encode_query(texts, batch_size=batch_size, verbose=self.verbose, **kwargs)
-
-    def encode_passage(self, texts: list[str], batch_size: int, **kwargs: Any) -> torch.Tensor:
-        model: BiEncoder = self.model
-        return model.encode_passage(texts, batch_size=batch_size, verbose=self.verbose, **kwargs)
+        self.sep = sep
+        self.model = BaseEncoder(model)
 
     def encode_queries(self, queries: list[str], batch_size: int, **kwargs: Any) -> np.ndarray:
         if self.verbose:
             logger.debug(f"{queries[0]=}")
 
-        instructions = kwargs.get("instructions")
-        queries = preprocess_queries(queries, instructions)
+        instructions = kwargs.pop("instructions")
+        preprocess_queries(queries, instructions)
 
         if self.verbose and instructions:
             logger.debug(f"{queries[0]=}")
 
-        embs = self.encode_query(queries, batch_size=batch_size)
-        return embs.cpu().float().numpy()
+        return self.model.encode_queries(
+            queries,
+            batch_size=batch_size,
+            show_progress_bar=False,
+            convert_to_tensor=False,
+        )
 
     def encode_corpus(self, corpus: list[dict[str, str]], batch_size: int, **kwargs: Any) -> np.ndarray:
-        if "qid" in kwargs and self.save_corpus_embeddings and kwargs["qid"] in self.corpus_embeddings:
-            return self.corpus_embeddings[kwargs["qid"]]
+        qid = kwargs.get("qid")
+        if qid and self.save_corpus_embeddings and qid in self.corpus_embeddings:
+            return self.corpus_embeddings[qid]
 
         assert isinstance(corpus, list) and isinstance(corpus[0], dict)
 
@@ -80,72 +82,43 @@ class BiEncoder_MTEB(DRESModel):
         for doc in corpus:
             title = doc.get("title")
             text = doc["text"]
-            texts.append(self.format_passage(text, title))
+            texts.append(f"{title}{self.sep}{text}" if title else text)
 
-        embs = self.encode_passage(texts, batch_size=batch_size)
-        embs = embs.cpu().float().numpy()
+        embs = self.model.encode_corpus(
+            texts,
+            batch_size=batch_size,
+            show_progress_bar=False,
+            convert_to_tensor=False,
+        )
 
-        if self.save_corpus_embeddings and "qid" in kwargs:
-            self.corpus_embeddings[kwargs["qid"]] = embs
+        if self.save_corpus_embeddings and qid:
+            self.corpus_embeddings[qid] = embs
 
         return embs
 
-    def format_passage(self, text: str, title: str | None = None) -> str:
-        return f"{title}\n{text}" if title else text
 
-
-class GEM_MTEB(BiEncoder_MTEB):
+class GEM_MTEB(MTEBEncoder):
 
     def __init__(
         self,
         model: GEM,
         *,
-        no_generation: bool = False,
         verbose: bool = True,
+        no_generation: bool = False,
         generation_batch_size: int | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(model, verbose=verbose, **kwargs)
 
-        self.no_generation = no_generation
-        self.generation_batch_size = generation_batch_size
-
-    def encode_query(self, texts: list[str], batch_size: int, **kwargs: Any) -> torch.Tensor:
-        model: GEM = self.model
-        if self.no_generation:
-            embs = model.encode_passage(
-                texts,
-                batch_size=batch_size,
-                verbose=self.verbose,
-                max_length=1024,
-            )
-        else:
-            embs = model.encode_query(
-                texts,
-                batch_size=self.generation_batch_size or batch_size,
-                verbose=self.verbose,
-                max_length=1024,
-                max_new_tokens=1024,
-                do_sample=False,
-                **kwargs,
-            )
-
-        return embs
-
-    def encode_passage(self, texts: list[str], batch_size: int, **kwargs: Any) -> torch.Tensor:
-        model: GEM = self.model
-        return model.encode_passage(texts, batch_size=batch_size, verbose=self.verbose, max_length=1024)
-
-
-class Repllama_MTEB(BiEncoder_MTEB):
-
-    def format_passage(self, text: str, title: str | None = None) -> str:
-        # just to be consistent with official example: https://huggingface.co/castorini/repllama-v1-7b-lora-passage
-        return f"{title} {text}" if title else text
+        self.model = GEMEncoder(
+            model,
+            no_generation=no_generation,
+            generation_batch_size=generation_batch_size,
+        )
 
 
 def encode_query_expansion(
-    encode_query: Callable,
+    encode_queries: Callable,
     qe_file: str,
     is_model_gem: bool = False,
 ) -> Callable:
@@ -153,7 +126,7 @@ def encode_query_expansion(
     with open(qe_file, "rt") as f:
         query2expansion: dict[str, str] = json.load(f)
 
-    @functools.wraps(encode_query)
+    @functools.wraps(encode_queries)
     def wrapper_query2doc(queries: list[str], *args, **kwargs) -> torch.Tensor:
         # Following Query2Doc (https://aclanthology.org/2023.emnlp-main.585.pdf), we concatenate query and QE
         # Minor difference: "[SEP]" is not for modern LLM-based embedding model, we use "\n\n" as the separator instead.
@@ -161,39 +134,39 @@ def encode_query_expansion(
             assert q in query2expansion
 
         queries = [f"{q}\n\n{query2expansion[q]}" for q in queries]
-        return encode_query(queries, *args, **kwargs)
+        return encode_queries(queries, *args, **kwargs)
 
-    @functools.wraps(encode_query)
+    @functools.wraps(encode_queries)
     def wrapper_hyde(queries: list[str], *args, **kwargs) -> torch.Tensor:
         for q in queries:
             assert q in query2expansion
 
-        q_embs = encode_query(queries, *args, **kwargs)
+        q_embs = encode_queries(queries, *args, **kwargs)
 
         # only one QE per query for fair comparison
         queries = [query2expansion[q] for q in queries]
-        qe_embs = encode_query(queries, *args, **kwargs)
+        qe_embs = encode_queries(queries, *args, **kwargs)
 
         return (q_embs + qe_embs) / 2
 
-    @functools.wraps(encode_query)
+    @functools.wraps(encode_queries)
     def wrapper_gem(queries: list[str], *args, **kwargs) -> torch.Tensor:
         for q in queries:
             assert q in query2expansion
 
         # simply concatenate query and precomputed GEM's response; same as query2doc
         queries = [f"{q}\n\n{query2expansion[q]}" for q in queries]
-        return encode_query(queries, *args, **kwargs)
+        return encode_queries(queries, *args, **kwargs)
 
     # for our ablation study
-    @functools.wraps(encode_query)
+    @functools.wraps(encode_queries)
     def wrapper_add_gem_reason(queries: list[str], *args, **kwargs) -> torch.Tensor:
         for q in queries:
             assert q in query2expansion
 
         reasons = [query2expansion[q] for q in queries]
 
-        return encode_query(queries, *args, reason=reasons, **kwargs)
+        return encode_queries(queries, *args, reason=reasons, **kwargs)
 
     if "query2doc" in qe_file:
         return wrapper_query2doc
@@ -205,6 +178,7 @@ def encode_query_expansion(
         raise NotImplementedError(f"unsupported QE method: {qe_file}")
 
 
+# Adapted from official code: https://github.com/orionw/FollowIR/blob/master/scripts/gather_results.py#L48
 def log_results(output_dir: str, task_names: list[str] | None = None) -> None:
     if task_names is None:
         task_names = TASK_NAMES
@@ -220,7 +194,6 @@ def log_results(output_dir: str, task_names: list[str] | None = None) -> None:
         with open(path, "rt") as f:
             data = json.load(f)["test"]
 
-        # Adapted from official code: https://github.com/orionw/FollowIR/blob/master/scripts/gather_results.py#L48
         rankwise = data["p-MRR"]
 
         # map@1000 and ndcg@5
@@ -266,7 +239,7 @@ def log_results(output_dir: str, task_names: list[str] | None = None) -> None:
         )
 
 
-def load_mteb_model(args: argparse.Namespace) -> BiEncoder_MTEB:
+def load_mteb_model(args: argparse.Namespace) -> MTEBEncoder:
     model = None
 
     if args.model == "gem":
@@ -281,20 +254,21 @@ def load_mteb_model(args: argparse.Namespace) -> BiEncoder_MTEB:
         )
 
     elif args.model == "repllama":
-        model = Repllama_MTEB(Repllama(), verbose=args.verbose)
+        # sep=" " for consistency with official example: https://huggingface.co/castorini/repllama-v1-7b-lora-passage
+        model = MTEBEncoder(Repllama(), verbose=args.verbose, sep=" ")
 
     elif args.model == "promptriever":
-        model = Repllama_MTEB(Promptriever(), verbose=args.verbose)
+        model = MTEBEncoder(Promptriever(), verbose=args.verbose, sep=" ")
 
     elif args.model == "reasonir":
         from gem.exp.reasonir import ReasonIR
 
-        model = BiEncoder_MTEB(ReasonIR(), verbose=args.verbose)
+        model = MTEBEncoder(ReasonIR(), verbose=args.verbose)
 
     elif args.model == "bge":
         from gem.exp.bge import BGE
 
-        model = BiEncoder_MTEB(BGE(), verbose=args.verbose)
+        model = MTEBEncoder(BGE(), verbose=args.verbose)
 
     else:
         raise NotImplementedError(f"unsupported model: {args.model}")
@@ -327,8 +301,8 @@ def main():
 
     model = load_mteb_model(args)
     if args.qe_file is not None:
-        model.encode_query = encode_query_expansion(
-            model.encode_query,
+        model.model.encode_queries = encode_query_expansion(
+            model.model.encode_queries,
             args.qe_file,
             is_model_gem=args.model == "gem",
         )

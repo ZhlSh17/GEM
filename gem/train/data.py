@@ -177,8 +177,9 @@ class GEMDataset(torch.utils.data.Dataset):
             text = preproc.preprocess_query(
                 query=item["query"],
                 reason=item["reason"],
-                instruction=item["instruction"],
+                instruction=item.get("instruction"),
                 append_embed_token=append_embed_token,
+                prompt=item.get("prompt"),
             )
 
             results["query"] = preproc.tokenizer(text, add_special_tokens=False)
@@ -186,8 +187,9 @@ class GEMDataset(torch.utils.data.Dataset):
             prompt = preproc.preprocess_query(
                 query=item["query"],
                 reason=None,
-                instruction=item["instruction"],
+                instruction=item.get("instruction"),
                 append_embed_token=False,
+                prompt=item.get("prompt"),
             )
 
             prompt_len = len(preproc.tokenizer(prompt, add_special_tokens=False)["input_ids"])

@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import trange
 
 
+# See: https://github.com/xlang-ai/BRIGHT/blob/main/retrievers.py
 @torch.no_grad()
 def retrieval_promptriever(
     queries: list[str],
@@ -52,10 +53,10 @@ def retrieval_promptriever(
             if doc_emb is not None and doc_emb.shape[0] // batch_size > start_idx:
                 continue
 
-            embeddings = model.encode_passage(
+            embeddings = model.encode_corpus(
                 documents[start_idx : start_idx + batch_size],
                 batch_size=batch_size,
-                verbose=False,
+                show_progress_bar=False,
                 max_length=doc_max_length,
             )
 
@@ -73,10 +74,10 @@ def retrieval_promptriever(
     doc_emb = F.normalize(doc_emb, p=2, dim=1)
     query_emb = []
     for start_idx in trange(0, len(queries), batch_size):
-        embeddings = model.encode_query(
+        embeddings = model.encode_queries(
             queries[start_idx : start_idx + batch_size],
             batch_size=batch_size,
-            verbose=False,
+            show_progress_bar=False,
             max_length=query_max_length,
         )
 
@@ -107,7 +108,7 @@ def retrieval_gem(
 ) -> dict:
     from third_party.ReasonIR.evaluation.bright.retrievers import get_scores
     from gem.model import GEM
-    from gem.exp.base import GEM_Encoder
+    from gem.exp.helpers import GEMEncoder
 
     checkpoint = kwargs.get("checkpoint", None)
     if checkpoint is None:
@@ -125,7 +126,7 @@ def retrieval_gem(
     print(f"{query_max_length=}")
     print(f"{doc_max_length=}")
 
-    wrapper = GEM_Encoder(
+    wrapper = GEMEncoder(
         model,
         no_generation=kwargs.get("no_generation", False),
         generation_batch_size=kwargs.get("generation_batch_size") or batch_size,
@@ -148,9 +149,9 @@ def retrieval_gem(
             if doc_emb is not None and doc_emb.shape[0] // batch_size > start_idx:
                 continue
 
-            embeddings = wrapper.model.encode_passage(
+            embeddings = wrapper.encode_corpus(
                 documents[start_idx : start_idx + batch_size],
-                verbose=False,
+                show_progress_bar=False,
                 batch_size=batch_size,
                 max_length=doc_max_length,
             )

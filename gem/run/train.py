@@ -1,6 +1,6 @@
 import os
 
-from datasets import load_from_disk
+from datasets import load_from_disk, load_dataset
 from transformers import set_seed, HfArgumentParser, AutoTokenizer, AutoConfig
 from loguru import logger
 
@@ -40,10 +40,6 @@ def main() -> None:
     model = GEM.from_pretrained(
         model_args.model_name_or_path,
         attn_implementation=model_args.attn_implementation,
-        negatives_cross_device=train_args.negatives_cross_device,
-        emb_loss_temperature=train_args.emb_loss_temperature,
-        gen_loss_weight=train_args.gen_loss_weight,
-        emb_loss_weight=train_args.emb_loss_weight,
     )
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
 
@@ -53,8 +49,15 @@ def main() -> None:
         logger.info(f"set pad_token to eos_token: {tokenizer.pad_token}")
 
     # Data
+    if os.path.isdir(data_args.train_data):
+        _dataset = load_from_disk(data_args.train_data)
+    elif os.path.isfile(data_args.train_data) and data_args.train_data.endswith(".jsonl"):
+        _dataset = load_dataset("json", data_files=data_args.train_data)["train"]
+    else:
+        _dataset = load_dataset(data_args.train_data)["train"]
+
     train_dataset = GEMDataset(
-        dataset=load_from_disk(data_args.train_data),
+        dataset=_dataset,
         tokenizer=tokenizer,
         max_query_len=data_args.max_query_len,
         max_passage_len=data_args.max_passage_len,
@@ -70,6 +73,11 @@ def main() -> None:
         train_dataset=train_dataset,
         data_collator=data_collator,
         processing_class=tokenizer,
+        # args for loss
+        negatives_cross_device=train_args.negatives_cross_device,
+        emb_loss_temperature=train_args.emb_loss_temperature,
+        gen_loss_weight=train_args.gen_loss_weight,
+        emb_loss_weight=train_args.emb_loss_weight,
     )
 
     # assume sharing cache dir in multi-node setting

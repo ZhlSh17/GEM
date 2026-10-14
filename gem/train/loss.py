@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 import torch.distributed as dist
 
@@ -34,7 +32,7 @@ class DistributedContrastiveLoss:
         target *= p_reps.size(0) // q_reps.size(0)
         return self.cross_entropy(scores, target)
 
-    def _dist_gather_tensor(self, t: Optional[torch.Tensor]):
+    def _dist_gather_tensor(self, t: torch.Tensor):
         if t is None:
             return None
         t = t.contiguous()

@@ -1,1 +1,1 @@
-from gem.exp.base import BiEncoder
+from gem.exp.helpers import BiEncoder

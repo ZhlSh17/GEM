@@ -6,7 +6,7 @@ from typing import Any
 from gem.model import GEM
 
 
-class GEM_Timer(GEM):
+class GEMTimer(GEM):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
