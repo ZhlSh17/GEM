@@ -119,11 +119,8 @@ PS: make sure your prompt has a `{text}` placeholder.
 
 
 ---
-For further details, please refer to:
-- `gem.model.GEM.encode_queries`
-- `gem.model.GEM.encode_corpus`
-- `gem.model.GEM.generate_then_encode`
-- `gem.model.GEM.encode`
+
+For further details, please refer to [`gem/model.py`](https://github.com/ZhlSh17/GEM/blob/main/gem/model.py)
 
 
 
